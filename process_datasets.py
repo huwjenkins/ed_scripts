@@ -1,16 +1,18 @@
 #!/usr/bin/env dials.python
 # Process multiple microED datasets. 
 # Author Huw Jenkins 10.05.21
-# Last update 19.07.21
+# Last update 17.09.21
 
 import os
 import sys
 import time
 import logging
 import json
-import gemmi
 from libtbx import easy_run, easy_mp, Auto
-__version__ = '0.0.5'
+from dxtbx.serialize import load
+from dxtbx.util import format_float_with_standard_uncertainty
+
+__version__ = '0.1.0'
 
 class ProcessDataset:
   def __init__(self, parameters):
@@ -31,6 +33,10 @@ class ProcessDataset:
 
     # import
     cmd = f'dials.import template=../../../{dataset["template"]} {self.parameters["import"]}'
+    try:
+      cmd += f' image_range={dataset["image_range"]}'
+    except KeyError:
+      pass # no image_range
     r = easy_run.fully_buffered(command=cmd)
     if len(r.stderr_lines) > 0:
       with open('dials.import.err', 'w') as f:
@@ -117,12 +123,15 @@ class ProcessDataset:
       self.log.info(f'{dataset["template"]} failed in integration')
       return
 
-    # export 
-    cmd = f'dials.export integrated.expt integrated.refl intensity=profile format=xds_ascii'
-    easy_run.fully_buffered(command=cmd)
-
     # success so return path to output files
-    self.log.info(f'{dataset["template"]} processed successfully')
+    el = load.experiment_list('integrated.expt')
+    xtal = el.crystals()[0]
+    uc = xtal.get_unit_cell().parameters()
+    uc_sd = xtal.get_cell_parameter_sd()
+    sg = str(xtal.get_space_group().info())
+    unit_cell = [format_float_with_standard_uncertainty(v, e, minimum=1.0e-5) for (v, e) in zip(uc, uc_sd)]
+    output = '/'.join([self.parameters['sample'], f'grid{dataset["grid"]}', f'xtal{dataset["xtal"]:03}'])
+    self.log.info(f'{output} processed successfully {sg} {" ".join(unit_cell)}')
     return os.path.abspath('integrated.expt'), os.path.abspath('integrated.refl')
 
 def run(datasets_json):
