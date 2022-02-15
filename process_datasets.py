@@ -1,7 +1,7 @@
 #!/usr/bin/env dials.python
 # Process multiple microED datasets. 
 # Author Huw Jenkins 10.05.21
-# Last update 17.09.21
+# Last update 15.02.22
 
 import os
 import sys
@@ -12,7 +12,7 @@ from libtbx import easy_run, easy_mp, Auto
 from dxtbx.serialize import load
 from dxtbx.util import format_float_with_standard_uncertainty
 
-__version__ = '0.1.0'
+__version__ = '0.2.0'
 
 class ProcessDataset:
   def __init__(self, parameters):
@@ -159,17 +159,13 @@ def run(datasets_json):
       datasets = json.load(f)
   except json.decoder.JSONDecodeError as e:
     sys.exit(f'Unable to read {datasets_json} Error {e}')
-  # ncores = easy_mp.get_processes(Auto)
-  ncores = 8
-  nproc = 4
-  processes = int(ncores/nproc) if int(ncores/nproc) > 1 else 2
-  datasets['parameters'].update({'nproc':nproc})
+  
   for dataset in datasets['datasets']:
     log.info(f'Processing dataset {dataset["template"]} as {datasets["parameters"]["sample"]}/grid{dataset["grid"]}/xtal{dataset["xtal"]:03}')
   process_dataset = ProcessDataset(datasets['parameters'])
   results = easy_mp.parallel_map(process_dataset,
                                 iterable=datasets['datasets'],
-                                processes = processes,
+                                processes = datasets['parameters']['njobs'],
                                 preserve_order=True
                                )
   log.info('Created the following integrated files:')
