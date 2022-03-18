@@ -1,7 +1,7 @@
 #!/usr/bin/env dials.python
 # Process multiple microED datasets. 
 # Author Huw Jenkins 10.05.21
-# Last update 15.02.22
+# Last update 18.03.22
 
 import os
 import sys
@@ -12,7 +12,7 @@ from libtbx import easy_run, easy_mp, Auto
 from dxtbx.serialize import load
 from dxtbx.util import format_float_with_standard_uncertainty
 
-__version__ = '0.2.0'
+__version__ = '0.2.1'
 
 class ProcessDataset:
   def __init__(self, parameters):
@@ -20,6 +20,7 @@ class ProcessDataset:
       self.log = logging.getLogger(__name__)
   def __call__(self, dataset):
     work_dir = os.path.join(os.getcwd(), self.parameters['sample'], f'grid{dataset["grid"]}', f'xtal{dataset["xtal"]:03}')
+    dataset_id = '/'.join(work_dir.split(os.path.sep)[-3:])
     try:
       os.makedirs(work_dir)
     except FileExistsError:
@@ -28,8 +29,8 @@ class ProcessDataset:
 
     # already run?
     if os.path.isfile('integrated.expt'):
-      self.log.info(f'Skipping {os.getcwd()} as file integrated.expt exists')
-      return os.path.abspath('integrated.expt'), os.path.abspath('integrated.refl')
+      self.log.info(f'Skipping {dataset_id} as file integrated.expt exists')
+      return self.get_result(dataset_id=dataset_id, experiments='integrated.expt', skipped=True)
 
     # import
     cmd = f'dials.import template=../../../{dataset["template"]} {self.parameters["import"]}'
@@ -97,8 +98,8 @@ class ProcessDataset:
     cmd = f'dials.refine indexed.expt indexed.refl {self.parameters["refine"]} scan_varying=false output.experiments=refined_static.expt output.reflections=refined_static.refl'
     r = easy_run.fully_buffered(command=cmd)
     if len(r.stderr_lines) > 0:
-        with open('dials.refine_static.err', 'w') as f:
-          f.write('\n'.join(r.stderr_lines))
+      with open('dials.refine_static.err', 'w') as f:
+        f.write('\n'.join(r.stderr_lines))
     if not os.path.isfile('refined_static.expt'):
       self.log.info(f'{dataset["template"]} failed in intitial refinement')
       return
@@ -107,8 +108,8 @@ class ProcessDataset:
     cmd = f'dials.refine refined_static.expt refined_static.refl {self.parameters["refine"]} scan_varying=true'
     r = easy_run.fully_buffered(command=cmd)
     if len(r.stderr_lines) > 0:
-        with open('dials.refine.err', 'w') as f:
-          f.write('\n'.join(r.stderr_lines))
+      with open('dials.refine.err', 'w') as f:
+        f.write('\n'.join(r.stderr_lines))
     if not os.path.isfile('refined.expt'):
       self.log.info(f'{dataset["template"]} failed in scan varying refinement')
       return
@@ -117,22 +118,29 @@ class ProcessDataset:
     cmd = f'dials.integrate refined.expt refined.refl {self.parameters["integrate"]} nproc={self.parameters["nproc"]}'
     r = easy_run.fully_buffered(command=cmd)
     if len(r.stderr_lines) > 0:
-        with open('dials.integrate.err', 'w') as f:
-          f.write('\n'.join(r.stderr_lines))
+      with open('dials.integrate.err', 'w') as f:
+        f.write('\n'.join(r.stderr_lines))
     if not os.path.isfile('integrated.expt'):
       self.log.info(f'{dataset["template"]} failed in integration')
       return
 
-    # success so return path to output files
-    el = load.experiment_list('integrated.expt')
+    # success
+    return self.get_result(dataset_id=dataset_id, experiments='integrated.expt')
+
+  def get_result(self, dataset_id, experiments, skipped=False):
+    el = load.experiment_list(experiments)
     xtal = el.crystals()[0]
     uc = xtal.get_unit_cell().parameters()
     uc_sd = xtal.get_cell_parameter_sd()
     sg = str(xtal.get_space_group().info())
-    unit_cell = [format_float_with_standard_uncertainty(v, e, minimum=1.0e-5) for (v, e) in zip(uc, uc_sd)]
-    output = '/'.join([self.parameters['sample'], f'grid{dataset["grid"]}', f'xtal{dataset["xtal"]:03}'])
-    self.log.info(f'{output} processed successfully {sg} {" ".join(unit_cell)}')
-    return os.path.abspath('integrated.expt'), os.path.abspath('integrated.refl')
+    if not skipped:
+      unit_cell = [format_float_with_standard_uncertainty(v, e, minimum=1.0e-5) for (v, e) in zip(uc, uc_sd)]
+      self.log.info(f'{dataset_id} processed successfully {sg} {" ".join(unit_cell)}')
+    formatted_unit_cell = [f'{v:6.2f}' if e > 1.0e-5 else f'{int(v):3d}' for (v, e) in zip(uc, uc_sd)]
+    return {'dataset_id':dataset_id,
+            'output_files':[os.path.abspath('integrated.expt'), os.path.abspath('integrated.refl')] if not skipped else [],
+            'sg':sg,
+            'uc':formatted_unit_cell}
 
 def run(datasets_json):
   # start logging to stdout
@@ -171,7 +179,11 @@ def run(datasets_json):
   log.info('Created the following integrated files:')
   successful_results = [r for r in results if r is not None]
   for r in successful_results:
-    log.info(f'{r[0]} {r[1]}')
+    if len(r['output_files']) > 0:
+      log.info(f"{r['output_files'][0]} {r['output_files'][1]}")
+  log.info('Summary of results:')
+  for r in successful_results:
+    log.info(f"{r['dataset_id']} {r['sg']} {' '.join(r['uc'])}")
   log.info(f'End time: {str(time.asctime(time.localtime(time.time())))}')
 if __name__ == '__main__':
   if len(sys.argv) == 1:
