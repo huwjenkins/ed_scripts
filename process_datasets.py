@@ -1,7 +1,7 @@
 #!/usr/bin/env dials.python
 # Process multiple microED datasets. 
 # Author Huw Jenkins 10.05.21
-# Last update 18.03.22
+# Last update 23.03.22
 
 import os
 import sys
@@ -12,7 +12,7 @@ from libtbx import easy_run, easy_mp, Auto
 from dxtbx.serialize import load
 from dxtbx.util import format_float_with_standard_uncertainty
 
-__version__ = '0.2.1'
+__version__ = '0.2.2'
 
 class ProcessDataset:
   def __init__(self, parameters):
@@ -136,7 +136,7 @@ class ProcessDataset:
     if not skipped:
       unit_cell = [format_float_with_standard_uncertainty(v, e, minimum=1.0e-5) for (v, e) in zip(uc, uc_sd)]
       self.log.info(f'{dataset_id} processed successfully {sg} {" ".join(unit_cell)}')
-    formatted_unit_cell = [f'{v:6.2f}' if e > 1.0e-5 else f'{int(v):3d}' for (v, e) in zip(uc, uc_sd)]
+    formatted_unit_cell = [f'{v:6.2f}' if e > 1.0e-5 else f'{round(v,0):3.0f}' for (v, e) in zip(uc, uc_sd)]
     return {'dataset_id':dataset_id,
             'output_files':[os.path.abspath('integrated.expt'), os.path.abspath('integrated.refl')] if not skipped else [],
             'sg':sg,
