@@ -12,7 +12,7 @@ from libtbx import easy_run, easy_mp, Auto
 from dxtbx.serialize import load
 from dxtbx.util import format_float_with_standard_uncertainty
 
-__version__ = '0.2.2'
+__version__ = '0.3.0'
 
 class ProcessDataset:
   def __init__(self, parameters):
@@ -34,10 +34,8 @@ class ProcessDataset:
 
     # import
     cmd = f'dials.import template=../../../{dataset["template"]} {self.parameters["import"]}'
-    try:
+    if dataset.get('image_range'):
       cmd += f' image_range={dataset["image_range"]}'
-    except KeyError:
-      pass # no image_range
     r = easy_run.fully_buffered(command=cmd)
     if len(r.stderr_lines) > 0:
       with open('dials.import.err', 'w') as f:
@@ -85,6 +83,15 @@ class ProcessDataset:
         with open('dials.index.err', 'w') as f:
           f.write('\n'.join(r.stderr_lines))
     else:
+      if self.parameters.get('initial_index_P1'):
+        cmd = f'dials.index {expt} strong.refl {self.parameters["index"]} output.experiments=P1.expt output.reflections=P1.refl output.log=dials.index_P1.log'
+        r = easy_run.fully_buffered(command=cmd)
+        if len(r.stderr_lines) > 0:
+          with open('dials.index_P1.err', 'w') as f:
+            f.write('\n'.join(r.stderr_lines))
+        else:
+          expt = 'P1.expt'
+
       cmd = f'dials.index {expt} strong.refl {self.parameters["index"]} space_group={self.parameters["spacegroup"]}'
       r = easy_run.fully_buffered(command=cmd)
       if len(r.stderr_lines) > 0:
