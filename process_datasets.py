@@ -1,7 +1,7 @@
 #!/usr/bin/env dials.python
 # Process multiple microED datasets. 
 # Author Huw Jenkins 10.05.21
-# Last update 23.03.22
+# Last update 27.06.22
 
 import os
 import sys
@@ -12,7 +12,7 @@ from libtbx import easy_run, easy_mp, Auto
 from dxtbx.serialize import load
 from dxtbx.util import format_float_with_standard_uncertainty
 
-__version__ = '0.3.0'
+__version__ = '0.3.1'
 
 class ProcessDataset:
   def __init__(self, parameters):
@@ -43,31 +43,34 @@ class ProcessDataset:
         self.log.info(f'import of {dataset["template"]} failed!')
       return
 
+    if self.parameters.get('generate_mask') and self.parameters['generate_mask'] != '':
+      # generate mask
+      cmd = f'dials.generate_mask imported.expt {self.parameters["generate_mask"]}'
+      r = easy_run.fully_buffered(command=cmd)
+      if len(r.stderr_lines) > 0:
+        with open('dials.generate_mask.err', 'w') as f:
+          f.write('\n'.join(r.stderr_lines))
 
-    # generate mask
-    cmd = f'dials.generate_mask imported.expt {self.parameters["generate_mask"]}'
-    r = easy_run.fully_buffered(command=cmd)
-    if len(r.stderr_lines) > 0:
-      with open('dials.generate_mask.err', 'w') as f:
-        f.write('\n'.join(r.stderr_lines))
-
-    # apply mask
-    cmd = f'dials.apply_mask imported.expt mask=pixels.mask'
-    r = easy_run.fully_buffered(command=cmd)
-    if len(r.stderr_lines) > 0:
-      with open('dials.apply_mask.err', 'w') as f:
-        f.write('\n'.join(r.stderr_lines))
+      # apply mask
+      cmd = f'dials.apply_mask imported.expt mask=pixels.mask'
+      r = easy_run.fully_buffered(command=cmd)
+      if len(r.stderr_lines) > 0:
+        with open('dials.apply_mask.err', 'w') as f:
+          f.write('\n'.join(r.stderr_lines))
+      else:
+        expt = 'masked.expt'
+    else:
+      expt = 'imported.expt'
 
     # find spots
-    cmd = f'dials.find_spots masked.expt {self.parameters["find_spots"]} nproc={self.parameters["nproc"]}'
+    cmd = f'dials.find_spots {expt} {self.parameters["find_spots"]} nproc={self.parameters["nproc"]}'
     r = easy_run.fully_buffered(command=cmd)
     if len(r.stderr_lines) > 0:
       with open('dials.find_spots.err', 'w') as f:
         f.write('\n'.join(r.stderr_lines))
-    
-    expt = 'masked.expt'
+
     if self.parameters['search_beam']:
-      cmd = f'dials.search_beam_position masked.expt strong.refl'
+      cmd = f'dials.search_beam_position {expt} strong.refl'
       r = easy_run.fully_buffered(command=cmd)
       if len(r.stderr_lines) > 0:
         with open('dials.search_beam_position.err', 'w') as f:
