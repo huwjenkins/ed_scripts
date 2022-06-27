@@ -12,7 +12,7 @@ from libtbx import easy_run, easy_mp, Auto
 from dxtbx.serialize import load
 from dxtbx.util import format_float_with_standard_uncertainty
 
-__version__ = '0.3.1'
+__version__ = '0.3.2'
 
 class ProcessDataset:
   def __init__(self, parameters):
@@ -69,14 +69,25 @@ class ProcessDataset:
       with open('dials.find_spots.err', 'w') as f:
         f.write('\n'.join(r.stderr_lines))
 
-    if self.parameters['search_beam']:
-      cmd = f'dials.search_beam_position {expt} strong.refl'
+    # search beam position
+    if self.parameters.get('search_beam'):
+      cmd = f'dials.search_beam_position {expt} strong.refl output.experiments=optimised_beam.expt'
       r = easy_run.fully_buffered(command=cmd)
       if len(r.stderr_lines) > 0:
         with open('dials.search_beam_position.err', 'w') as f:
           f.write('\n'.join(r.stderr_lines))
       else:
-        expt = 'optimised.expt'
+        expt = 'optimised_beam.expt'
+
+    # find rotation axis
+    if self.parameters.get('find_rotation_axis'):
+      cmd = f'dials.find_rotation_axis {expt} strong.refl {self.parameters["find_rotation_axis"]} output.experiments=optimised_axis.expt'
+      r = easy_run.fully_buffered(command=cmd)
+      if len(r.stderr_lines) > 0:
+        with open('find_rotation_axis.err', 'w') as f:
+          f.write('\n'.join(r.stderr_lines))
+      else:
+        expt = 'optimised_axis.expt'
 
     if self.parameters['spacegroup'] in [None, 'P1']:
       # index in P1
@@ -169,7 +180,7 @@ def run(datasets_json):
   fh = logging.FileHandler(logfile)
   fh.setFormatter(fmt)
   log.addHandler(fh)
-  log.info(f'Multi microED dataset processor version {__version__}')
+  log.info(f'Multi 3DED/microED dataset processor version {__version__}')
   log.info(f'Start time: {str(time.asctime(time.localtime(time.time())))}')
   # read datasets.json:
   try:
