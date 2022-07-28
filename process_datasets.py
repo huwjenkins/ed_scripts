@@ -14,7 +14,7 @@ from dials.array_family import flex
 from dxtbx.serialize import load
 from dxtbx.util import format_float_with_standard_uncertainty
 
-__version__ = '0.3.3'
+__version__ = '0.3.4'
 
 class ProcessDataset:
   def __init__(self, parameters):
@@ -35,7 +35,10 @@ class ProcessDataset:
       return self.get_result(dataset_id=dataset_id, experiments='integrated.expt', reflections='indexed.refl', skipped=True)
 
     # import
-    cmd = f'dials.import template=../../../{dataset["template"]} {self.parameters["import"]}'
+    if dataset.get('template'):
+      cmd = f'dials.import template=../../../{dataset["template"]} {self.parameters["import"]}'
+    else:
+      cmd = f'dials.import ../../../{dataset["file"]} {self.parameters["import"]}'
     if dataset.get('image_range'):
       cmd += f' image_range={dataset["image_range"]}'
     r = easy_run.fully_buffered(command=cmd)
@@ -209,7 +212,10 @@ def run(datasets_json):
     sys.exit(f'Unable to read {datasets_json} Error {e}')
   
   for dataset in datasets['datasets']:
-    log.info(f'Processing dataset {dataset["template"]} as {datasets["parameters"]["sample"]}/grid{dataset["grid"]}/xtal{dataset["xtal"]:03}')
+    if dataset.get('template'):
+      log.info(f'Processing dataset {dataset["template"]} as {datasets["parameters"]["sample"]}/grid{dataset["grid"]}/xtal{dataset["xtal"]:03}')
+    else:
+      log.info(f'Processing dataset {dataset["file"]} as {datasets["parameters"]["sample"]}/grid{dataset["grid"]}/xtal{dataset["xtal"]:03}')
   process_dataset = ProcessDataset(datasets['parameters'])
   results = easy_mp.parallel_map(process_dataset,
                                 iterable=datasets['datasets'],
