@@ -14,7 +14,7 @@ from dials.array_family import flex
 from dxtbx.serialize import load
 from dxtbx.util import format_float_with_standard_uncertainty
 
-__version__ = '0.3.4'
+__version__ = '0.3.5'
 
 class ProcessDataset:
   def __init__(self, parameters):
@@ -45,7 +45,10 @@ class ProcessDataset:
     if len(r.stderr_lines) > 0:
       with open('dials.import.err', 'w') as f:
         f.write('\n'.join(r.stderr_lines))
-        self.log.info(f'import of {dataset["template"]} failed!')
+        if dataset.get('template'):
+          self.log.info(f'import of {dataset["template"]} failed!')
+        else:
+          self.log.info(f'import of {dataset["file"]} failed!')
       return
 
     if self.parameters.get('generate_mask') and self.parameters['generate_mask'] != '':
@@ -117,7 +120,7 @@ class ProcessDataset:
         with open('dials.index.err', 'w') as f:
           f.write('\n'.join(r.stderr_lines))
     if not os.path.isfile('indexed.expt'):
-      self.log.info(f'{dataset["template"]} failed to index in space group {self.parameters["spacegroup"]}')
+      self.log.info(f'{dataset_id} failed to index in space group {self.parameters["spacegroup"]}')
       return
 
     # refine (static)
@@ -127,7 +130,7 @@ class ProcessDataset:
       with open('dials.refine_static.err', 'w') as f:
         f.write('\n'.join(r.stderr_lines))
     if not os.path.isfile('refined_static.expt'):
-      self.log.info(f'{dataset["template"]} failed in intitial refinement')
+      self.log.info(f'{dataset_id} failed in intitial refinement')
       return
 
     # refine (scan varying)
@@ -137,7 +140,7 @@ class ProcessDataset:
       with open('dials.refine.err', 'w') as f:
         f.write('\n'.join(r.stderr_lines))
     if not os.path.isfile('refined.expt'):
-      self.log.info(f'{dataset["template"]} failed in scan varying refinement')
+      self.log.info(f'{dataset_id} failed in scan varying refinement')
       return
 
     # integrate 
@@ -147,7 +150,7 @@ class ProcessDataset:
       with open('dials.integrate.err', 'w') as f:
         f.write('\n'.join(r.stderr_lines))
     if not os.path.isfile('integrated.expt'):
-      self.log.info(f'{dataset["template"]} failed in integration')
+      self.log.info(f'{dataset_id} failed in integration')
       return
 
     # success
