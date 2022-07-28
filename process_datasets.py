@@ -1,18 +1,20 @@
 #!/usr/bin/env dials.python
 # Process multiple microED datasets. 
 # Author Huw Jenkins 10.05.21
-# Last update 27.06.22
+# Last update 28.07.22
 
+import math
 import os
 import sys
 import time
 import logging
 import json
 from libtbx import easy_run, easy_mp, Auto
+from dials.array_family import flex
 from dxtbx.serialize import load
 from dxtbx.util import format_float_with_standard_uncertainty
 
-__version__ = '0.3.2'
+__version__ = '0.3.3'
 
 class ProcessDataset:
   def __init__(self, parameters):
@@ -30,7 +32,7 @@ class ProcessDataset:
     # already run?
     if os.path.isfile('integrated.expt'):
       self.log.info(f'Skipping {dataset_id} as file integrated.expt exists')
-      return self.get_result(dataset_id=dataset_id, experiments='integrated.expt', skipped=True)
+      return self.get_result(dataset_id=dataset_id, experiments='integrated.expt', reflections='indexed.refl', skipped=True)
 
     # import
     cmd = f'dials.import template=../../../{dataset["template"]} {self.parameters["import"]}'
@@ -146,9 +148,9 @@ class ProcessDataset:
       return
 
     # success
-    return self.get_result(dataset_id=dataset_id, experiments='integrated.expt')
+    return self.get_result(dataset_id=dataset_id, experiments='integrated.expt', reflections='indexed.refl')
 
-  def get_result(self, dataset_id, experiments, skipped=False):
+  def get_result(self, dataset_id, experiments, reflections, skipped=False):
     el = load.experiment_list(experiments)
     xtal = el.crystals()[0]
     uc = xtal.get_unit_cell().parameters()
@@ -158,10 +160,27 @@ class ProcessDataset:
       unit_cell = [format_float_with_standard_uncertainty(v, e, minimum=1.0e-5) for (v, e) in zip(uc, uc_sd)]
       self.log.info(f'{dataset_id} processed successfully {sg} {" ".join(unit_cell)}')
     formatted_unit_cell = [f'{v:6.2f}' if e > 1.0e-5 else f'{round(v,0):3.0f}' for (v, e) in zip(uc, uc_sd)]
+    refl = flex.reflection_table.from_file(reflections)
+    n_total = len(refl)
+    refined = refl.get_flags(refl.flags.used_in_refinement)
+    indexed = refl.get_flags(refl.flags.indexed)
+    n_indexed = len(refl.select(indexed))
+    refl = refl.select(refined)
+    xo, yo, zo = refl["xyzobs.px.value"].parts()
+    xc, yc, zc = refl["xyzcal.px"].parts()
+    rmsd_x = math.sqrt(flex.mean(flex.pow2(xo - xc)))
+    rmsd_y = math.sqrt(flex.mean(flex.pow2(yo - yc)))
+    rmsd_z = math.sqrt(flex.mean(flex.pow2(zo - zc)))
+    formatted_rmsds = f'{rmsd_x:8.5f} {rmsd_y:8.5f} {rmsd_z:8.5f}'
     return {'dataset_id':dataset_id,
             'output_files':[os.path.abspath('integrated.expt'), os.path.abspath('integrated.refl')] if not skipped else [],
             'sg':sg,
-            'uc':formatted_unit_cell}
+            'uc':formatted_unit_cell,
+            'total':n_total,
+            'indexed':n_indexed,
+            'unindexed':n_total - n_indexed,
+            'rmsds':formatted_rmsds,
+           }
 
 def run(datasets_json):
   # start logging to stdout
@@ -204,7 +223,7 @@ def run(datasets_json):
       log.info(f"{r['output_files'][0]} {r['output_files'][1]}")
   log.info('Summary of results:')
   for r in successful_results:
-    log.info(f"{r['dataset_id']} {r['sg']} {' '.join(r['uc'])}")
+    log.info(f"{r['dataset_id']} {r['sg']} {' '.join(r['uc'])} {r['indexed']:5d} {r['unindexed']:5d} {100*r['indexed']/r['total']:5.1f} {r['rmsds']}")
   log.info(f'End time: {str(time.asctime(time.localtime(time.time())))}')
 if __name__ == '__main__':
   if len(sys.argv) == 1:
